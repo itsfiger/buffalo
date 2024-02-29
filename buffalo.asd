@@ -3,7 +3,7 @@
 (asdf:defsystem #:buffalo
   :name "buffalo"
   :description "An LALR(1) and canoncial LR(1) parser generator for Common Lisp"
-  :author "Frank Huttner <frank.huttner@gmx.de>"
+  :author "Frank Huttner"
   :version "1.5"
   :licence "BSD"
   :depends-on (:SparseSet)
