@@ -1,0 +1,830 @@
+<html lang="en">
+<head>
+<title>The Buffalo Manual</title>
+<meta http-equiv="Content-Type" content="text/html">
+<meta name="description" content="The Buffalo Manual">
+<meta name="generator" content="makeinfo 4.8">
+<link title="Top" rel="top" href="#Top">
+<link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
+<!--
+Copyright (C) 2015 by Frank Huttner.-->
+<meta http-equiv="Content-Style-Type" content="text/css">
+<style type="text/css"><!--
+  pre.display { font-family:inherit }
+  pre.format  { font-family:inherit }
+  pre.smalldisplay { font-family:inherit; font-size:smaller }
+  pre.smallformat  { font-family:inherit; font-size:smaller }
+  pre.smallexample { font-size:smaller }
+  pre.smalllisp    { font-size:smaller }
+  span.sc    { font-variant:small-caps }
+  span.roman { font-family:serif; font-weight:normal; } 
+  span.sansserif { font-family:sans-serif; font-weight:normal; } 
+--></style>
+</head>
+<body>
+<h1 class="settitle">The Buffalo Manual</h1>
+<div class="contents">
+<h2>Table of Contents</h2>
+<ul>
+<li><a name="toc_Top" href="#Top">Buffalo</a>
+<li><a name="toc_Introduction" href="#Introduction">1 Introduction</a>
+<li><a name="toc_Example" href="#Example">2 A complete example</a>
+<li><a name="toc_Reference" href="#Reference">3 Reference</a>
+<ul>
+<li><a href="#Running-the-parser">3.1 Running the parser</a>
+<li><a href="#Macro-interface">3.2 Macro interface</a>
+<li><a href="#Functional-interface">3.3 Functional interface</a>
+<li><a href="#Conditions">3.4 Conditions</a>
+<ul>
+<li><a href="#Compile_002dtime-conditions">3.4.1 Compile-time conditions</a>
+<li><a href="#Runtime-conditions">3.4.2 Runtime conditions</a>
+</li></ul>
+</li></ul>
+<li><a name="toc_Background" href="#Background">4 Background</a>
+<li><a name="toc_Literature" href="#Literature">5 Literature</a>
+<li><a name="toc_Literature" href="#Literature">Copying</a>
+<li><a name="toc_Index" href="#Index">6 Index</a>
+<li><a name="toc_Index" href="#Index">Index</a>
+</li></ul>
+</div>
+
+
+
+<div class="node">
+<p><hr>
+<a name="Top"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Introduction">Introduction</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#dir">(dir)</a>
+
+</div>
+
+<h2 class="unnumbered">Buffalo</h2>
+
+<p>buffalo is a canonical LR(1) and LALR(1) parser generator, written in
+pure Common Lisp.
+
+   <p>Its API is compatible with cl-yacc.
+
+   <p>The latest version of buffalo can be found on
+<a href="https://github.com/fhuttner/buffalo/">the buffalo web page</a>.
+
+   <p>This manual was written by Frank Huttner, based on the cl-yacc manual
+by Juliusz Chroboczek.
+
+<ul class="menu">
+<li><a accesskey="1" href="#Introduction">Introduction</a>:                 Introduction
+<li><a accesskey="2" href="#Example">Example</a>:                      A complete example. 
+<li><a accesskey="3" href="#Reference">Reference</a>:                    Reference. 
+<li><a accesskey="4" href="#Background">Background</a>:                   Background. 
+<li><a accesskey="5" href="#Literature">Literature</a>:                   Literature. 
+<li><a accesskey="6" href="#Index">Index</a>:                        Index. 
+</ul>
+
+<div class="node">
+<p><hr>
+<a name="Introduction"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Example">Example</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Top">Top</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
+
+<h2 class="chapter">1 Introduction</h2>
+
+<p>Buffalo is a canonical LR(1) and LALR(1) parser generator: it computes
+parsing tables and associated semantic actions out of a BNF grammar
+specification that is then used by a pushdown automaton (also part of
+the package) to parse input in the language specified by the grammar.
+
+   <p>Buffalo's LALR(1) generator is a pure Common Lisp implementation of
+the DeRemer/Pennello algorithm [1] to compute lookahead sets, while
+the LR(1) generator is based on Knuth's original canonical method. 
+Both generators use sparse sets, patricia tries, and other efficient
+algorithms, internally, while maintaining a "lispy" interface both
+upstream (grammar syntax) and downstream (integration with the rest of
+lisp).
+
+   <p>buffalo implements POSIX-yacc compliant precedence rules
+(<code>%right</code>, <code>%left</code>, <code>%nonassoc</code>, <code>%prec</code>) and
+conflict resolution mechanisms (including reporting requirements).
+
+   <p>Buffalo implements all of the functionality and all of the user
+interface functions and macros of cl-yacc (on which code base it is in
+part built). Software that runs with cl-yacc should work with buffalo
+without modification.
+
+   <p>Features:
+     <ul>
+<li>Comprehensive grammar checks
+<li>Basic Export/Import facilities to and from POSIX yacc
+<li>yacc conflict resolution mechanism
+<li>Fast table construction
+<li>Simple compilation model for seamless integration with Lisp
+</ul>
+   Limitations:
+     <ul>
+<li>No "error" productions for error recovery
+<li>No lexer
+</ul>
+
+<div class="node">
+<p><hr>
+<a name="Example"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Reference">Reference</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Introduction">Introduction</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
+
+<h2 class="chapter">2 A complete example</h2>
+
+<p>A parser consumes the output of a lexer, that produces a stream of
+terminals. Buffalo expects the lexer to be a function of no arguments
+that returns two values: the next terminal symbol, and
+the value of the symbol, which will be passed to the action associated
+with a production. At the end of the input, the lexer should return
+<code>nil</code>.
+
+   <p>Buffalo exports its symbols from the package <code>buffalo</code>:
+
+<pre class="lisp">     (use-package '#:buffalo)
+</pre>
+   <p>The main features will be presented by a function that is actual code
+in buffalo: the parsing of a yacc grammar file.
+
+<pre class="lisp">     (defun build-grammar-from-yacc (name file &amp;optional name-alist)
+       (let ((addtokens '())
+             ;; create a automaton structure that represents the current state of the
+             ;; finite state machine used for parsing including the symbol and
+             ;; value stacks
+             (automaton (make-automaton))
+             (precs '()))
+         (flet ((precedence (type symbls)
+                  (push (cons type symbls) precs)
+                  (values))
+                (typ (type)
+                  (declare (ignore type))
+                  ;; The value of type, e.g. a string %left, could be used as easily
+                  ;; But the keyword symbol is known to sit on the top of the symbols
+                  ;; stack (because it a shift action on it that moved the machine here),
+                  ;; it can be used conveniently
+                  (first (automaton-symbol-stack automaton)))
+                (second-arg (&amp;rest rest) (second rest))
+                (p13 (&amp;rest rest) (list (first rest) (third rest)))
+                (c13 (&amp;rest rest) (cons (first rest) (third rest))))
+           (let* ((parser
+                   (def-parser
+                     (:start-symbol program)
+                     (:terminals (:token :left :right :nonassoc
+                                         :start :%% :id :string_literal :|;| :|\|| :|:|))
+                     (program
+                      (tokendefs start productions))
+                     (tokendefs
+                      ()
+                      (tokendef tokendefs #'append))
+                     (tokendef
+                      (:token tokens #'second-arg)
+                      (precedence symbols #'precedence))
+                     (tokens
+                      ()
+                      (:id tokens #'cons))
+                     (precedence
+                      (:left #'typ)
+                      (:right #'typ)
+                      (:nonassoc #'typ))
+                     (start
+                      (:start :id :%%))
+                     (productions
+                      (production)
+                      (production productions #'cons))
+                     (production
+                      (:id :|:| alternatives :|;| #'p13))
+                     (alternatives
+                      (symbols)
+                      (symbols :|\|| alternatives #'c13))
+                     (symbols
+                      ()
+                      (symbol symbols #'cons))
+                     (symbol
+                      (:string_literal (lambda (s) (pushnew s addtokens) s))
+                      :id)))
+                  (ast (parse-with-lexer (lisplex file name-alist) parser automaton))
+                  (tokens (first ast))
+                  (start (second ast))
+                  (rules (third ast)))
+             `(define-parser ,name
+                (:start-symbol ,(cadr start))
+                (:precedence ,(nreverse precs))
+                (:terminals ,(union addtokens tokens))
+                ,@(loop for rule in rules
+                     collect `(,(car rule) ,@(cadr rule))))))
+     
+</pre>
+   <p>The grammar can be written to a file using buffalo's
+<code>write-to-yacc-file</code> function. Instead of a parser, it expects a
+grammar, but because the syntax is identical, <code>def-parser</code>'s
+forms can be given to <code>def-grammar</code> and the result be used in
+<code>write-to-yacc-file</code>, producing the following output.
+
+<pre class="smallexample">     %token  TOKEN  LEFT  RIGHT  NONASSOC  START  __  ID  STRING_LITERAL
+     
+     %start program
+     
+     %%
+     
+     program :  tokendefs start productions ;
+     
+     tokendefs :
+               |  tokendef tokendefs ;
+     
+     tokendef :  TOKEN tokens
+              |  precedence symbols ;
+     
+     tokens :
+            |  ID tokens ;
+     
+     precedence :  LEFT
+                |  RIGHT
+                |  NONASSOC ;
+     
+     start :  START ID __ ;
+     
+     productions :  production
+                 |  production productions ;
+     
+     production :  ID ":" alternatives ";" ;
+     
+     alternatives :  symbols
+                  |  symbols "|" alternatives ;
+     
+     symbols :
+             |  symbol symbols ;
+     
+     symbol :  STRING_LITERAL
+            |  ID ;
+     
+</pre>
+   <p>Because string-literals, i.e. one-symbol tokens like "|" or ";" don't
+have to be specified in yacc as tokens but buffalo needs them (a
+symbol is a symbol no matter how long its print-name), it is just
+easier to push them onto the <var>addtokens</var> variable as they are
+encountered.
+
+   <p>Note, that buffalo arranges for name translation, following yacc's
+lexical conventions, so <code>:%%</code> becomes <code>__</code>. (Names are
+traced internally, so that e.g. <code>$$</code> would be translated into a
+different string.) The name translation table is stored by
+<code>write-to-yacc</code> internally, so it can be used to read a yacc file
+in and produce the same token symbols.
+
+   <p>The parser itself (or better, the parsing tables) are generated by the
+macro <code>def-parser</code>. Semantic actions are defined as the last
+element of each production.  If no semantic action is specified,
+buffalo provides default actions which are either <code>#'list</code> or
+<code>#'identity</code>, depending on how a production is written.
+
+   <p>The example shows some distinctive features of buffalo:
+     <ul>
+<li>The semantic actions can be specified in a local environment (the
+parser can still be fasdumped, because there is no compile time
+magic).
+
+     <li>The semantic actions have full access to local variables.
+
+     <li>A <code>automaton</code> structure can be passed into the
+<code>parse-with-lexer</code> function as an optional argument (if it is not
+supplied the function creates a fresh one for itself), allowing
+semantic actions to access the current parser state without the need
+of having the <code>parse-with-lexer</code> as a macro. 
+</ul>
+
+   <p>Because the parser table is just a list of vectors it can even be
+passed around with local variables closed over.
+
+   <p>Another typical application would be the cross-communication between
+lexer and parser automaton, for example to avoid the C <code>typdef</code>
+ambiguity by keeping track of <code>typdef</code>'s in a shared variable.
+
+<div class="node">
+<p><hr>
+<a name="Reference"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Background">Background</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Example">Example</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
+
+<h2 class="chapter">3 Reference</h2>
+
+<ul class="menu">
+<li><a accesskey="1" href="#Running-the-parser">Running the parser</a>:            How to invoke a parser. 
+<li><a accesskey="2" href="#Macro-interface">Macro interface</a>:              High-level macro interface. 
+<li><a accesskey="3" href="#Functional-interface">Functional interface</a>:         Low-leve functional interface. 
+<li><a accesskey="4" href="#Conditions">Conditions</a>:                   Conditions signalled by buffalo. 
+</ul>
+
+<div class="node">
+<p><hr>
+<a name="Running-the-parser"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Macro-interface">Macro interface</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Reference">Reference</a>
+
+</div>
+
+<h3 class="section">3.1 Running the parser</h3>
+
+<p>The main entry point to the parser is <code>parse-with-lexer</code>.
+
+<div class="defun">
+&mdash; Function: <b>parse-with-lexer</b><var> lexer parser </var><tt>&amp;optional</tt><var> automaton-structure<a name="index-parse_002dwith_002dlexer-1"></a></var><br>
+<blockquote><p>Parse the input provided by the lexer <var>lexer</var> using the parser
+<var>parser</var>.
+
+        <p>The value of <var>lexer</var> should be a function of no arguments that
+returns two values: the terminal symbol corresponding to the next
+token (a non-null symbol), and its value (anything that the associated
+actions can take as argument).  It should return <code>(values nil
+nil)</code> when the end of the input is reached.
+
+        <p>The value of <var>parser</var> should be a <code>parser</code> table, as
+computed by <code>make-parser</code>, <code>define-parser</code> or <code>def-parser</code>.
+
+        <p>The optional argument <var>automaton-structure</var> must be a
+<code>automaton</code> structure as generated by <code>make-automaton</code>. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Function: <b>make-automaton</b><var><a name="index-make_002dautomaton-2"></a></var><br>
+<blockquote><p>Creates a <code>automaton</code> structure to pass to
+<code>parse-with-lexer</code> as third argument. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Function: <b>automaton-state-stack</b><var> automaton<a name="index-automaton_002dstate_002dstack-3"></a></var><br>
+&mdash; Function: <b>automaton-val-stack</b><var> automaton<a name="index-automaton_002dval_002dstack-4"></a></var><br>
+&mdash; Function: <b>automaton-symbol-stack</b><var> automaton<a name="index-automaton_002dsymbol_002dstack-5"></a></var><br>
+<blockquote><p>Returns the state, value or symbol stack of <var>automaton</var>. A list
+with the current state, value or symbol as first element. 
+</p></blockquote></div>
+
+<div class="node">
+<p><hr>
+<a name="Macro-interface"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Functional-interface">Functional interface</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Running-the-parser">Running the parser</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Reference">Reference</a>
+
+</div>
+
+<h3 class="section">3.2 Macro interface</h3>
+
+<div class="defun">
+&mdash; Macro: <b>define-grammar</b><var> name option... production...<a name="index-define_002dgrammar-6"></a></var><br>
+&mdash; Macro: <b>def-grammar</b><var> option... production...<a name="index-def_002dgrammar-7"></a></var><br>
+<blockquote><pre class="format"><var>option</var> ::= <code>(</code> <var>keyword</var> <var>value</var> <code>)</code>
+     <var>production</var> ::= <code>(</code> <var>symbol</var> <var>rhs</var>... <code>)</code>
+     <var>rhs</var> ::= <var>symbol</var>
+     <var>rhs</var> ::= <code>(</code> <var>symbol</var>... [<var>action</var>] <code>)</code>
+</pre>
+        <p>Generates a grammar and, in the first variant, binds it to the special
+variable <var>name</var>.  This has the side effect of globally proclaiming
+<var>name</var> special.
+
+        <p>Every production is a list of a non-terminal symbol and one or more
+right hand sides.  Every right hand side is either a symbol, or a list
+of symbols optionally followed with an action.
+
+        <p>When the first symbol of the list is <code>:%prec</code> the next symbol is
+taken to be a terminal whose precedence level determines the precedence
+of the production, following symbols build the right hand side.
+
+        <p>The action should be a non-atomic form that evaluates to a function in
+a given environment.  If omitted, it defaults to <code>#'identity</code> in
+the first form of <var>rhs</var>, and to <code>#'list</code> in the second form.
+
+        <p>The legal options are:
+
+          <dl>
+<dt><code>:start-symbol</code><dd>Defines the starting symbol of the grammar.  This is required.
+
+          <br><dt><code>:terminals</code><dd>Defines the list of terminals of the grammar.  This is required.
+
+          <br><dt><code>:precedence</code><dd>
+The value of this option should be a list of items of the form
+<code>(</code><var>associativity</var><code> . </code><var>terminals</var><code>)</code>, where
+<var>associativity</var> is one of <code>:left</code>, <code>:right</code>,
+<code>:nonassoc</code> or <code>:precedence</code>, and <var>terminals</var> is a list
+of terminal symbols.  <var>Associativity</var> specifies the associativity
+of the terminals, and earlier items will give their elements a
+precedence higher than that of later ones. Caution: This is in reverse
+order to POSIX yacc! 
+</dl>
+        </p></blockquote></div>
+
+<div class="defun">
+&mdash; Macro: <b>define-parser</b><var> name option... production...<a name="index-define_002dparser-8"></a></var><br>
+&mdash; Macro: <b>def-parser</b><var> option... production...<a name="index-def_002dparser-9"></a></var><br>
+<blockquote><p>Generates a parser and, in the first variant, binds it to the special
+variable <var>name</var>.  This has the side effect of globally proclaiming
+<var>name</var> special.
+
+        <p>The syntax is the same as that of <code>define-grammar</code> or
+<code>def-grammar</code>, except that the following additional options are
+allowed:
+
+          <dl>
+<dt><code>:muffle-conflicts</code><dd>
+If <code>nil</code> (the default), a warning is signalled for every
+conflict.  If the symbol <code>:some</code>, then only a summary of the
+number of conflicts is signalled.  If <code>T</code>, then no warnings at
+all are signalled for conflicts.  Otherwise, its value should be a
+list of two integers (<var>sr</var> <var>rr</var>), in which case a summary
+warning will be signalled unless exactly <var>sr</var> shift-reduce and
+<var>rr</var> reduce-reduce conflicts were found.
+
+          <br><dt><code>:muffle-warnings</code><dd>
+If <code>t</code> (the default), no warnings about non-critical
+inconsistencies in the grammar are signalled. 
+At the moment there are three sources for this warning.
+
+               <ul>
+<li>Unused terminals
+
+               <li>Empty nonterminals:
+buffalo at the moment does not remove empty nonterminals, so if they
+are used on the right hand side of a production they may cause spurious
+warnings.
+
+               <li>Unreachable states and unused productions:
+Both of them occur during conflict resolution, e.g. when a reduction is
+preferred over a shift and the shift state is no longer accessible. 
+buffalo does not remove or renumber states and productions.
+
+          </ul>
+
+          <br><dt><code>:print-derives-epsilon</code><dd>If true, print the list of nonterminal symbols that derive the empty
+string.
+
+          <br><dt><code>:print-states</code><dd>If true, print the computed kernels of LR(0) items.
+
+          <br><dt><code>:print-includes</code><dd>If true, print the a list of non-terminal transitions that &ldquo;include&rdquo;
+(in DeRemer/Pennello terminology) other such transitions. For
+debugging purposes mainly. Only used by the LALR(1) generator.
+
+          <br><dt><code>:print-first-terminals</code><dd>If true, print the set of first terminals for both each nonterminal symbol
+and each item. Only for the LR(1) generator.
+
+          <br><dt><code>:print-nonterminal-derivations</code><dd>If true, print the shortest terminal derivation for each nonterminal.
+
+          <br><dt><code>:print-state-sentential-forms</code><dd>If true, print the shortest sentential form (terminals and
+nonterminals) to reach each state.
+
+          <br><dt><code>:canonical-lr1</code><dd>If true, generate a canonical LR(1) parser instead of an LALR(1) parser.
+
+          <br><dt><code>:force-check</code><dd>Force a grammar check for unused productions and unreachable states
+even without reportable conflicts and <code>:muffle-warnings</code> set to
+<code>t</code>.
+
+        </dl>
+        </p></blockquote></div>
+
+<div class="node">
+<p><hr>
+<a name="Functional-interface"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Conditions">Conditions</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Macro-interface">Macro interface</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Reference">Reference</a>
+
+</div>
+
+<h3 class="section">3.3 Functional interface</h3>
+
+<p>The macros <code>define-parser</code>, <code>define-grammar</code> and their
+siblings <code>def-parser</code> and <code>def-grammar</code> use calls to
+<code>make-parser</code>, <code>make-grammar</code> and <code>make-production</code> to
+generate the grammar and parser, respectively.  The underlying
+functions are exported in case you want to design a different syntax
+for grammars, or generate grammars programatically.
+
+<div class="defun">
+&mdash; Function: <b>make-production</b><var> symbol derives </var><tt>&amp;key</tt><var> action<a name="index-make_002dproduction-10"></a></var><br>
+<blockquote><p>Returns a production for non-terminal <var>symbol</var> with
+right-hand-side <var>derives</var> (a list of symbols).  <var>Action</var> is
+the associated action, and should be a function; it defaults to
+<code>#'list</code>. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Function: <b>make-grammar</b> <tt>&amp;key</tt><var> name start-symbol terminals precedence productions<a name="index-make_002dgrammar-11"></a></var><br>
+<blockquote><p>Returns a grammar. 
+<var>Name</var>, <var>Start-symbol</var>, <var>terminals</var> and <var>precedence</var>
+are as in <code>define-grammar</code>.  <var>Productions</var> is a list of productions. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Function: <b>make-parser</b><var> grammar </var><tt>&amp;key</tt><var> muffle-conflicts muffle-warnings print-derives-epsilon print-states print-includes print-first-terminals force-check canonical-lr1<a name="index-make_002dparser-12"></a></var><br>
+&mdash; Function: <b>make-lr1-parser</b><var> grammar </var><tt>&amp;key</tt><var> ...<a name="index-make_002dlr1_002dparser-13"></a></var><br>
+<blockquote><p>Computes and returns a parser for grammar <var>grammar</var>. 
+<var>muffle-conflicts</var>, <var>muffle-warnings</var>,
+<var>print-derives-epsilon</var>, <var>print-states</var>,
+<var>print-first-terminals</var>, <var>print-includes</var>, <var>force-check</var>, and
+<var>canoncial-lr1</var> are as in <code>define-parser</code>. 
+<code>make-lr1-parser</code> sets <var>canoncial-lr1</var> to <code>true</code>, other
+options are identical. 
+As second value statistics of grammar and automaton are returned. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Function: <b>print-grammar-in-yacc-format</b><var> grammar<a name="index-print_002dgrammar_002din_002dyacc_002dformat-14"></a></var><br>
+<blockquote><p>Produces a POSIX yacc compliant string for grammar <var>grammar</var>,
+returning as second value an alist of form ( <var>string</var> <var>symbol</var>
+), where <var>string</var> is the grammar symbol in yacc output,
+<var>symbol</var> the corresponding lisp symbol. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Function: <b>build-grammar-from-yacc</b><var> name file </var><tt>&amp;optional</tt><var> name-alist<a name="index-build_002dgrammar_002dfrom_002dyacc-15"></a></var><br>
+<blockquote><p>Reads the lexer output for a POSIX yacc compliant grammar from
+<var>file</var>, using the optionally supplied <var>name-alist</var>. If a
+string for a token cannot be found in <var>name-alist</var>, a symbol is
+created by interning in the current package case-sensitive.  The file
+<var>file</var> shoud be a text file, with the token at first position on
+each line, followed by the value, separeted and surrounded by an
+arbitrary number of spaces. The token should result in a keyword token
+when interned uppercase into the keyword package.  A lexer
+specification <code>bnf.lex</code> is included in buffalo. Using flex and a
+C compiler a lexer can be created. 
+In a shell in the working directory, type:
+
+     <pre class="verbatim">     
+     $  flex bnf.lex
+     $  gcc -o bnf lex.yy.c
+     $  cat mygrammar.y| ./bnf > mygrammar.txt
+</pre>
+
+        <p>Then in the REPL the tokenized grammar can be imported with
+     <pre class="lisp">          (build-grammar-from-yacc 'mygrammar "mygrammar.txt")
+     </pre>
+        <p>Note that neither flex nor the compiler are part of buffalo. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Function: <b>write-to-yacc-file</b><var> file grammar<a name="index-write_002dto_002dyacc_002dfile-16"></a></var><br>
+<blockquote><p>Produces a POSIX yacc compliant string for grammar <var>grammar</var>, and
+saves it in the file <var>file</var>. If the file exists it will be
+overridden. As side effect, a <code>name-alist</code> is saved internally,
+to be used with read-from-yacc-file. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Function: <b>read-from-yacc-file</b><var> file<a name="index-read_002dfrom_002dyacc_002dfile-17"></a></var><br>
+<blockquote><p>Reads the lexer output for a POSIX yacc compliant grammar from
+<var>file</var>, using the <code>name-alist</code> from the last call to
+<code>write-to-yacc-file</code>. 
+</p></blockquote></div>
+
+<div class="node">
+<p><hr>
+<a name="Conditions"></a>
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Functional-interface">Functional interface</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Reference">Reference</a>
+
+</div>
+
+<h3 class="section">3.4 Conditions</h3>
+
+<p>Buffalo may signal errors at compile time when the grammar is
+inconsistent and may signal warnings at compile time when it finds
+conflicts.  It may also signal an error at parse time when it finds
+that the input is incorrect.
+
+<ul class="menu">
+<li><a accesskey="1" href="#Compile_002dtime-conditions">Compile-time conditions</a>:           Compile-time conditions. 
+<li><a accesskey="2" href="#Runtime-conditions">Runtime conditions</a>:                Run-time conditions. 
+</ul>
+
+<div class="node">
+<p><hr>
+<a name="Compile-time-conditions"></a>
+<a name="Compile_002dtime-conditions"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Runtime-conditions">Runtime conditions</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Conditions">Conditions</a>
+
+</div>
+
+<h4 class="subsection">3.4.1 Compile-time conditions</h4>
+
+<p>If the grammar is inconsistent, an error of type
+<code>buffalo-grammar-error</code> is signalled. Typically, the reason are
+misspelled symbols that are neither terminals nor appear as
+non-terminals, terminals that start a production or other
+irrecoverable errors in the grammar definition.
+
+   <p>If the grammar given to buffalo is ambiguous, a warning of type
+<code>conflict-warning</code> will be signalled for every conflict as it is
+found, and a warning of type <code>conflict-summary-warning</code> will be
+signalled at the end of parser generation.
+
+<div class="defun">
+&mdash; Condition: <b>buffalo-grammar-error</b><var><a name="index-buffalo_002dgrammar_002derror-18"></a></var><br>
+<blockquote><p>Signalled after the grammar check phase is finished in case the
+grammar is inconsistent. All problems found are reported. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Condition: <b>conflict-warning</b><var><a name="index-conflict_002dwarning-19"></a></var><br>
+<blockquote><p>Signalled whenever a conflict is found. Type, state and conflicting
+productions are reported. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Condition: <b>conflict-summary-warning</b><var> shift-reduce reduce-reduce<a name="index-conflict_002dsummary_002dwarning-20"></a></var><br>
+<blockquote><p>Signalled at the end of parser generation if there were any conflicts
+with th number of shift/reduce and reduce/reduce conflicts found. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Condition: <b>buffalo-muffable-warning</b><var><a name="index-buffalo_002dmuffable_002dwarning-21"></a></var><br>
+<blockquote><p>Signalled during parser generation if there are non-critical
+inconsistencies in the grammar like unused terminals and
+<code>:muffle-warnings</code> is <code>nil</code>. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Condition: <b>buffalo-compile-warning</b><var><a name="index-buffalo_002dcompile_002dwarning-22"></a></var><br>
+<blockquote><p>A superclass of <code>conflict-warning</code> and
+<code>conflict-summary-warning</code>. 
+</p></blockquote></div>
+
+<div class="node">
+<p><hr>
+<a name="Runtime-conditions"></a>
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Compile_002dtime-conditions">Compile-time conditions</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Conditions">Conditions</a>
+
+</div>
+
+<h4 class="subsection">3.4.2 Runtime conditions</h4>
+
+<p>If the output cannot be parsed, the parser will signal a condition of
+type <code>buffalo-parse-error</code>.
+
+<div class="defun">
+&mdash; Condition: <b>buffalo-parse-error</b><var> terminal value expected-terminals<a name="index-buffalo_002dparse_002derror-23"></a></var><br>
+<blockquote><p>Signalled whenever the input cannot be parsed.  The symbol
+<var>terminal</var> is the terminal that couldn't be accepted; <var>value</var>
+is its value.  <var>Expected-terminals</var> is the list of terminals that
+could have been accepted in that state. 
+</p></blockquote></div>
+
+<div class="defun">
+&mdash; Condition: <b>buffalo-runtime-error</b><var><a name="index-buffalo_002druntime_002derror-24"></a></var><br>
+<blockquote><p>A superclass of <code>buffalo-parse-error</code>. 
+</p></blockquote></div>
+
+<div class="node">
+<p><hr>
+<a name="Background"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Literature">Literature</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Reference">Reference</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
+
+<h2 class="chapter">4 Background</h2>
+
+<p>buffalo implements the standard techniques of parser generation as in
+[1], with the exception of LALR(1) lookaheads, for which the more
+efficient algorithm from [4] is used. Nullable and empty symbols
+(symbols without any all-terminal derivation; when the start symbol
+does not have such a derivation it is considered a fatal error) are
+computed by a linear algorithm from [2].  Epsilon transitions - the
+relations used to form state closures - are pre-computed on a
+nonterminal or item basis, a technique found in [5] and [6], for
+example.
+
+   <p>All sets are internally represented in compressed format, viz. only
+indices of vectors are actually stored while data and marks for used
+indices are stored in working arrays that can be accessed in constant
+time. Data associated with indices is stored in sparse maps, a
+technique also known as scatter-gather, see [7].
+
+   <p>States are stored in Patricia tries, see [3], an efficient data
+structure with tight worst case performance and linear space
+requirements.  Because of the latter it is possible to have individual
+Patricia tries per accessing symbol (the item set forms a disjoint union
+with respect to the these).
+
+   <p>Because the &ldquo;number&rdquo; or index of each symbol is stored directly on
+the symbols plist (and removed afterwards), the implementation is
+completely hash-free.
+
+   <p>Conflicts are explained in terms of shortest paths through the
+pushdown automaton (using a breadth-first algorithm and a simple
+queue).  A terminal derivation is also given, by replacing each
+nonterminal by the its shortest terminal derivation (Knuth's
+generalization of Dijkstras algorithm is used).  Although the
+explanation is also available for LALR(1) parsers, there is usually
+not enough information in the LR(0) states (the algorithm from [4] is
+not implemented).
+
+<div class="node">
+<p><hr>
+<a name="Literature"></a>
+Next:&nbsp;<a rel="next" accesskey="n" href="#Index">Index</a>,
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Background">Background</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
+
+<h2 class="chapter">5 Literature</h2>
+
+<p>[1] Alfred V. Aho, Ravi Sethi and Jeffrey D. Ullman. 
+Compilers: Principles, Techniques, and Tools. Addison-Wesley, 1996.
+
+   <p>[2] Seppo Sippu and Eljas Soisalon-Soininen. Parsing Theory, Vol. I. 
+Springer, 1990.
+
+   <p>[3] Robert Sedgwick. Algorithms in C++, Parts 1-4. Addison Wesley Longman, 1999.
+
+   <p>[4] DeRemer, Frank, and Thomas Pennello. "Efficient computation of
+LALR (1) look-ahead sets." ACM Transactions on Programming Languages
+and Systems (TOPLAS) 4.4 (1982): 615-649.
+
+   <p>[5] Park, Joseph CH, Kwang-Moo Choe, and C. H. Chang. "A new analysis
+of LALR formalisms." ACM Transactions on Programming Languages and
+Systems (TOPLAS) 7.1 (1985): 159-175.
+
+   <p>[6] Fancois Pottier and Yann Regis-Gianas. Menhir. 
+http://cristal.inria.fr/fpottier/menhir
+
+   <p>[7] Davis, Timothy A. Direct methods for sparse linear
+systems. Vol. 2. Siam, 2006.
+
+<h2 class="unnumbered">Copying</h2>
+
+<blockquote>
+Copyright &copy; 2015 by Frank Huttner
+
+        <p>Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+        <p>The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+        <p>THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+        <p>The software contains code from cl-yacc Copyright (c) 2005-2009 by
+Juliusz Chroboczek and minheap by Stephan Frank Copyright (c)
+2007-2012 under the same licence. 
+</blockquote>
+
+<div class="node">
+<p><hr>
+<a name="Index"></a>
+Previous:&nbsp;<a rel="previous" accesskey="p" href="#Literature">Literature</a>,
+Up:&nbsp;<a rel="up" accesskey="u" href="#Top">Top</a>
+
+</div>
+
+<h2 class="chapter">6 Index</h2>
+
+<h2 class="unnumbered">Index</h2>
+
+<ul class="index-fn" compact>
+<li><a href="#index-automaton_002dstate_002dstack-3"><code>automaton-state-stack</code></a>: <a href="#Running-the-parser">Running the parser</a></li>
+<li><a href="#index-automaton_002dsymbol_002dstack-5"><code>automaton-symbol-stack</code></a>: <a href="#Running-the-parser">Running the parser</a></li>
+<li><a href="#index-automaton_002dval_002dstack-4"><code>automaton-val-stack</code></a>: <a href="#Running-the-parser">Running the parser</a></li>
+<li><a href="#index-buffalo_002dcompile_002dwarning-22"><code>buffalo-compile-warning</code></a>: <a href="#Compile_002dtime-conditions">Compile-time conditions</a></li>
+<li><a href="#index-buffalo_002dgrammar_002derror-18"><code>buffalo-grammar-error</code></a>: <a href="#Compile_002dtime-conditions">Compile-time conditions</a></li>
+<li><a href="#index-buffalo_002dmuffable_002dwarning-21"><code>buffalo-muffable-warning</code></a>: <a href="#Compile_002dtime-conditions">Compile-time conditions</a></li>
+<li><a href="#index-buffalo_002dparse_002derror-23"><code>buffalo-parse-error</code></a>: <a href="#Runtime-conditions">Runtime conditions</a></li>
+<li><a href="#index-buffalo_002druntime_002derror-24"><code>buffalo-runtime-error</code></a>: <a href="#Runtime-conditions">Runtime conditions</a></li>
+<li><a href="#index-build_002dgrammar_002dfrom_002dyacc-15"><code>build-grammar-from-yacc</code></a>: <a href="#Functional-interface">Functional interface</a></li>
+<li><a href="#index-conflict_002dsummary_002dwarning-20"><code>conflict-summary-warning</code></a>: <a href="#Compile_002dtime-conditions">Compile-time conditions</a></li>
+<li><a href="#index-conflict_002dwarning-19"><code>conflict-warning</code></a>: <a href="#Compile_002dtime-conditions">Compile-time conditions</a></li>
+<li><a href="#index-def_002dgrammar-7"><code>def-grammar</code></a>: <a href="#Macro-interface">Macro interface</a></li>
+<li><a href="#index-def_002dparser-9"><code>def-parser</code></a>: <a href="#Macro-interface">Macro interface</a></li>
+<li><a href="#index-define_002dgrammar-6"><code>define-grammar</code></a>: <a href="#Macro-interface">Macro interface</a></li>
+<li><a href="#index-define_002dparser-8"><code>define-parser</code></a>: <a href="#Macro-interface">Macro interface</a></li>
+<li><a href="#index-make_002dautomaton-2"><code>make-automaton</code></a>: <a href="#Running-the-parser">Running the parser</a></li>
+<li><a href="#index-make_002dgrammar-11"><code>make-grammar</code></a>: <a href="#Functional-interface">Functional interface</a></li>
+<li><a href="#index-make_002dlr1_002dparser-13"><code>make-lr1-parser</code></a>: <a href="#Functional-interface">Functional interface</a></li>
+<li><a href="#index-make_002dparser-12"><code>make-parser</code></a>: <a href="#Functional-interface">Functional interface</a></li>
+<li><a href="#index-make_002dproduction-10"><code>make-production</code></a>: <a href="#Functional-interface">Functional interface</a></li>
+<li><a href="#index-parse_002dwith_002dlexer-1"><code>parse-with-lexer</code></a>: <a href="#Running-the-parser">Running the parser</a></li>
+<li><a href="#index-print_002dgrammar_002din_002dyacc_002dformat-14"><code>print-grammar-in-yacc-format</code></a>: <a href="#Functional-interface">Functional interface</a></li>
+<li><a href="#index-read_002dfrom_002dyacc_002dfile-17"><code>read-from-yacc-file</code></a>: <a href="#Functional-interface">Functional interface</a></li>
+<li><a href="#index-write_002dto_002dyacc_002dfile-16"><code>write-to-yacc-file</code></a>: <a href="#Functional-interface">Functional interface</a></li>
+   </ul></body></html>
+

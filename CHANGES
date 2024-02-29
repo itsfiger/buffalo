@@ -1,0 +1,9 @@
+Version 1.5
++ Linear algorithm for computation of nullable and empty symbols
++ Knuth-Dijkstra algorithm with Fibonacci heap for computation of shortest
+  terminal derivations
++ More output:
+  - Shortest terminal sentences for conflict explanation
+  - Shortest terminal derivations
+  - Shortest sentential forms for each state
+
